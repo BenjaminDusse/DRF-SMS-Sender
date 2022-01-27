@@ -1,25 +1,26 @@
+import os
 import requests
 import json
-from django.conf import settings
-from celery import shared_task
+from celery import Celery
 from congrats.models import CustomUser
+from django.conf import settings
 
-def sms_login():
-    params = {'email': settings.SMS_EMAIL, 'password': settings.SMS_PASSWORD}
-    r = requests.post('http://notify.eskiz.uz/api/auth/login', params=params)
-    token = r.json()['data']['token']
-    return token
+# Set the default Django settings module for the 'celery' program.
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'proj.settings')
+
+app = Celery('congrats')
+
+# Using a string here means the worker doesn't have to serialize
+# the configuration object to child processes.
+# - namespace='CELERY' means all celery-related configuration keys
+#   should have a `CELERY_` prefix.
+app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# Load task modules from all registered Django apps.
+app.autodiscover_tasks()
 
 
-
-def sms_refresh():
-    r = requests.post('http://notify.eskiz.uz' + '/api/auth/login/',
-                      {'email': settings.SMS_EMAIL, 'password': settings.SMS_PASSWORD}).json()
-    token = r['data']['token']
-    return token
-
-
-@shared_task
+@app.task(bind=True)
 def sms_send(phone_number, text):
     users = CustomUser.objects.values('phone_number')
     for user in users:
@@ -49,6 +50,3 @@ def sms_send(phone_number, text):
         except:
             return None
         
-
-
-
